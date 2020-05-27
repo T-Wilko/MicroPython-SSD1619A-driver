@@ -14,6 +14,9 @@ import ustruct, framebuf
 DRIVER_CTRL            = const(0x01)
 GATE_SCAN_START        = const(0x0F)
 DATA_ENTRY_MODE        = const(0x11)
+SET_DUMMY_PERIOD       = const(0x3A)
+SET_GATE_WIDTH         = const(0x3B)
+SET_WAVE_CTRL          = const(0x3C)
 RAM_X_ADDRESS          = const(0x44)
 RAM_Y_ADDRESS          = const(0x45)
 SET_RAM_COUNTER_X      = const(0x4E)
@@ -24,13 +27,14 @@ DISP_UPDATE_1          = const(0x21)
 DISP_UPDATE_2          = const(0x22)
 WRITE_RAM_BW           = const(0x24)
 WRITE_RAM_RED          = const(0x26)
+SET_ANALOGUE_CTRL      = const(0x74)
+SET_DIGITAL_CTRL       = const(0x7E)
 
 
 class EPD(framebuf.FrameBuffer):
     def __init__(self, spi, dc, cs, rst, busy, width, height):
         
         self.spi = spi
-        #self.spi = SPI(1, 10000000, sck=Pin(14), mosi=Pin(13), miso=Pin(12))
         self.spi.init()
         self.dc = Pin(dc)
         self.cs = Pin(cs)
@@ -56,15 +60,15 @@ class EPD(framebuf.FrameBuffer):
         self.wait_until_idle()
         
         # Set analogue then digital block control
-        self._command('b\x74','b\x54')
-        self._command('b\x7E','b\x3B')
+        self._command(SET_ANALOGUE_CTRL,'b\x54')
+        self._command(SET_DIGITAL_CTRL,'b\x3B')
         
         # Set driver output control
         self._command(DRIVER_CTRL)
         # Set dummy line period, gate line width, waveform control
-        self._command('b\x3A')
-        self._command('b\x3B')
-        self._command('b\x3C')
+        self._command(SET_DUMMY_PERIOD)
+        self._command(SET_GATE_WIDTH)
+        self._command(SET_WAVE_CTRL)
         
         # Set RAM start/end positions
         self._command(RAM_X_ADDRESS)
@@ -74,20 +78,19 @@ class EPD(framebuf.FrameBuffer):
         
         
     def _command(self, command, data=None):
-        self.cs(1) # according to LOLIN_EPD
-        self.dc(0)
         self.cs(0)
+        self.dc(0)
         self.spi.write(bytearray([command]))
         self.cs(1)
         if data is not None:
             self._data(data)
 
     def _data(self, data):
-        self.cs(1) # according to LOLIN_EPD
-        self.dc(1)
         self.cs(0)
+        self.dc(1)
         self.spi.write(data)
         self.cs(1)
+        self.dc(0)
     
     def wait_until_idle(self):
         while self.busy == 1:
@@ -111,6 +114,9 @@ class EPD_RED(EPD):
         self._data(self.buffer)
     
     def show(self):
+        self._command(WRITE_RAM_RED)
+        for i in range(0, len(self.buffer)):
+            self._data(bytearray([self.buffer[i]]))
         self._command(DISP_UPDATE_2)
         self._command(MASTER_ACTIVATION)
         self.wait_until_idle()
